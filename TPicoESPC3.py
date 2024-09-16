@@ -21,6 +21,7 @@ class ESPC3:
                  debug=False):
         """ Inicializa el UART para el módulo ESP32C3 """
         self._debug = debug
+        self._ip = None  # Variable para almacenar la IP
         
         try:
             self._uart = UART(uart_id,
@@ -268,7 +269,34 @@ class ESPC3:
             print(f"  Seguridad: {security}")
             print("-" * 60)  # Línea de separación entre APs
         print("=" * 60)  # Línea de cierre
-    """    
+    """
+
+    def get_ip(self):
+        try:
+            response = self.send("AT+CIFSR")
+            # Asegúrate de que la respuesta sea de tipo bytes y la convierta a string
+            response = response.decode('utf-8')  # Convierte bytes a string
+            # Buscar la línea que contiene la IP
+            lines = response.splitlines()
+            for line in lines:
+                if "CIFSR:STAIP" in line:
+                    # Extraer la IP
+                    ip_start = line.find('"') + 1
+                    ip_end = line.rfind('"')
+                    ip_address = line[ip_start:ip_end]
+                    return ip_address
+        except Exception as e:
+            print(f"Error al obtener la IP: {e}")
+        return None
+
+    def get_mac_address(self):
+        """ Obtiene la dirección MAC del ESP32C3. """
+        reply = self.send("AT+CIFSR").strip(b"\r\n")
+        for line in reply.split(b"\r\n"):
+            if line.startswith(b'+CIFSR:STAMAC,"'):
+                return str(line[15:-1], "utf-8")  # Retorna la dirección MAC
+        raise RuntimeError("Couldn't find MAC address")
+    
     def get_AP(self, retries=3):
         for _ in range(retries):
             try:
