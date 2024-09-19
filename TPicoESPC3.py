@@ -12,16 +12,16 @@ class ESPC3:
     MODE_SOFTAPSTATION = 3
 
     def __init__(self,
-                 uart_id=1,  # Cambia a UART1, que se usa en el ejemplo anterior
+                 uart_id=1,
                  tx_pin=8,
                  rx_pin=9,
                  baud_rate=115200,
                  tx_buffer=1024,
                  rx_buffer=2048,
                  debug=False):
-        """ Inicializa el UART para el módulo ESP32C3 """
+        """ Initializes the UART for the ESP32C3 module """
         self._debug = debug
-        self._ip = None  # Variable para almacenar la IP
+        self._ip = None  # Variable to store the IP
         
         try:
             self._uart = UART(uart_id,
@@ -31,21 +31,21 @@ class ESPC3:
                               txbuf=tx_buffer,
                               rxbuf=rx_buffer)
             if self._debug:
-                print("UART inicializado correctamente.")
+                print("UART initialized successfully.")
         except Exception as e:
-            print("Error al inicializar UART:", e)
+            print("Error initializing UART:", e)
             self._uart = None
             
     def send(self, at, timeout=20, retries=3):
-        """ Envía un comando AT, verifica que obtuvimos una respuesta OK,
-            y luego devuelve el texto de la respuesta.
+        """ Sends an AT command, checks that we got an OK response,
+            and then returns the response text.
         """
         for _ in range(retries):
             if self._debug:
                 print("tx ---> ", at)
             
             self._uart.write(bytes(at, "utf-8"))
-            self._uart.write(b"\x0d\x0a")  # Enviar CR+LF
+            self._uart.write(b"\x0d\x0a")  # Send CR+LF
             stamp = time.time()
             response = b""
             
@@ -61,21 +61,21 @@ class ESPC3:
                 print("<--- rx ", response)
 
             if response[-4:] == b"OK\r\n":
-                return response[:-4]  # Retorna la respuesta sin 'OK'
+                return response[:-4]  # Return the response without 'OK'
             
-            time.sleep(1)  # Espera antes de reintentar
+            time.sleep(1)  # Wait before retrying
         raise Exception("No OK response to " + at)
     
     def enable_ipv6(self):
-        """ Habilita el uso de IPv6 en el módulo ESP32C3. """
+        """ Enables the use of IPv6 on the ESP32C3 module. """
         self.send("AT+CIPV6=1", timeout=3)
-        print("IPv6 habilitado.")
+        print("IPv6 enabled.")
     
     def ping(self, host):
-        """ Pinga el IP o nombre de host dado, devuelve el tiempo en ms o None en caso de fallo
-        """
-        # Asegúrate de habilitar IPv6 si es necesario
-        self.enable_ipv6()  # Llama a la función para habilitar IPv6
+        """ Pings the given IP or hostname, returns the time in ms or None on failure """
+        
+        # Make sure to enable IPv6 if necessary
+        self.enable_ipv6()  # Call the function to enable IPv6
         
         reply = self.send('AT+PING="%s"' % host.strip('"'), timeout=5)
         for line in reply.split(b"\r\n"):
@@ -89,8 +89,8 @@ class ESPC3:
         raise RuntimeError("Couldn't ping")
 
     def connect(self, secrets):
-        """ Intenta conectarse a un punto de acceso con los detalles en
-            el diccionario 'secrets' pasado.
+        """ Tries to connect to an access point with the details in
+            the passed 'secrets' dictionary.
         """
         retries = 3
         while retries > 0:
@@ -101,72 +101,72 @@ class ESPC3:
             except RuntimeError as exp:
                 print("Failed to connect, retrying\n", exp)
                 retries -= 1
-                time.sleep(2)  # Espera antes de reintentar
+                time.sleep(2)  # Wait before retrying
 
     def parse_cwjap_response(self, reply):
-        """Parsea la respuesta del comando +CWJAP? para extraer todos los valores."""
-        # La respuesta viene en la forma +CWJAP:<ssid>,<bssid>,<channel>,<rssi>,<pci_en>,<reconn_interval>,<listen_interval>,<scan_mode>,<pmf>
+        """ Parses the response from the +CWJAP? command to extract all values:
+            The response comes in the form +CWJAP:<ssid>,<bssid>,<channel>,<rssi>,<pci_en>,<reconn_interval>,<listen_interval>,<scan_mode>,<pmf>
+        """
+        
         replies = reply.split(b"\r\n")
         
         for line in replies:
             if line.startswith(b"+CWJAP:"):
-                # Elimina el prefijo "+CWJAP:" y divide los valores
+                # Remove the prefix "+CWJAP:" and split the values
                 line = line[7:].split(b",")
                 
-                # Procesar y almacenar cada campo
+                # Process and store each field
                 parsed_values = {
                     "ssid": str(line[0], "utf-8").strip('"'),          # SSID
                     "bssid": str(line[1], "utf-8").strip('"'),         # BSSID
                     "channel": int(line[2]),                           # Canal
                     "rssi": int(line[3]),                              # RSSI
-                    "pci_en": int(line[4]),                            # PCI habilitado
-                    "reconn_interval": int(line[5]),                   # Intervalo de reconexión
-                    "listen_interval": int(line[6]),                   # Intervalo de escucha
-                    "scan_mode": int(line[7]),                         # Modo de escaneo
+                    "pci_en": int(line[4]),                            # PCI enabled
+                    "reconn_interval": int(line[5]),                   # Reconnection interval
+                    "listen_interval": int(line[6]),                   # Listen interval
+                    "scan_mode": int(line[7]),                         # Scan mode
                     "pmf": int(line[8])                                # PMF (Frame Management Protection)
                 }
                 return parsed_values
         return None
     
     def join_ap(self, ssid, password):
-        """ Intenta unirse a un punto de acceso por nombre y contraseña. """
+        """ Tries to join an access point by name and password. """
         if self.mode != self.MODE_STATION:
             self.mode = self.MODE_STATION
         
-        # Si ya está conectado a la red especificada, devolver la información directamente
+        # If already connected to the specified network, return the information directly
         cwjap_reply = self.send("AT+CWJAP?", timeout=10)
         parsed_cwjap = self.parse_cwjap_response(cwjap_reply)
         
         if parsed_cwjap and parsed_cwjap['ssid'] == ssid:
-            return parsed_cwjap  # Ya estamos conectados, devolver la información
+            return parsed_cwjap  # We are already connected, return the information
     
-        # Intentar conectar al AP
+        # Try to connect to the AP
         for _ in range(3):
             reply = self.send(
                 f'AT+CWJAP="{ssid}","{password}"', timeout=15, retries=3
             )
             
-            # Comprobar si la conexión fue exitosa
+            # Check if the connection was successful
             if b"WIFI CONNECTED" in reply and b"WIFI GOT IP" in reply:
-                # Obtener detalles de la conexión
+                # Get connection details
                 cwjap_reply = self.send("AT+CWJAP?", timeout=10)
                 parsed_cwjap = self.parse_cwjap_response(cwjap_reply)
                 if parsed_cwjap:
                     return parsed_cwjap
-        # Si falla después de 3 intentos, lanzar una excepción
-        raise Exception("No se pudo conectar a la red.")
+        # If it fails after 3 attempts, raise an exception
+        raise Exception("Could not connect to the network.")
 
     @property
     def is_connected(self):
-        """ Verifica si estamos conectados a un punto de acceso.
-        """
+        """ Checks if we are connected to an access point. """
         state = self.status
         return state in (self.STATUS_APCONNECTED, self.STATUS_SOCKETOPEN, self.STATUS_SOCKETCLOSED)
 
     @property
     def status(self):
-        """ El estado de la conexión IP.
-        """
+        """ The state of the IP connection. """
         replies = self.send("AT+CIPSTATUS", timeout=5).split(b"\r\n")
         for reply in replies:
             if reply.startswith(b"STATUS:"):
@@ -175,8 +175,7 @@ class ESPC3:
 
     @property
     def remote_AP(self):
-        """ El nombre del punto de acceso al que estamos conectados, como una cadena.
-        """
+        """ The name of the access point we are connected to, as a string. """
         if self.status != self.STATUS_APCONNECTED:
             return [None] * 4
 
@@ -184,18 +183,18 @@ class ESPC3:
         for reply in replies:
             if reply.startswith(b"+CWJAP:"):
                 reply = reply[7:].split(b",")
-                print("Respuesta de +CWJAP:", reply)  # Agregar depuración aquí
+                print("Response from +CWJAP:", reply)  # Add debugging here
                 try:
-                    # Convertir cada valor al tipo correspondiente
-                    ssid = str(reply[0], "utf-8").strip('"')  # SSID como string
-                    bssid = str(reply[1], "utf-8")  # BSSID como string
-                    channel = int(reply[2])  # Canal como entero
-                    rssi = int(reply[3])  # RSSI como entero
-                    # Agrega más campos si es necesario según el formato
+                    # Convert each value to the corresponding type
+                    ssid = str(reply[0], "utf-8").strip('"')  # SSID as string
+                    bssid = str(reply[1], "utf-8")  # BSSID as string
+                    channel = int(reply[2])  # Channel as integer
+                    rssi = int(reply[3])  # RSSI as integer
+                    # Add more fields if necessary according to the format
                     return [ssid, bssid, channel, rssi]
                 except (ValueError, IndexError) as e:
-                    print("Error al analizar la respuesta de +CWJAP:", e)
-                    return [None] * 4  # Devolver valores por defecto en caso de error
+                    print("Error parsing the response from +CWJAP:", e)
+                    return [None] * 4  # Return default values in case of error
                 
         return [None] * 4
 
@@ -209,92 +208,44 @@ class ESPC3:
 
     @mode.setter
     def mode(self, mode):
-        """ Selección del modo: puede ser MODE_STATION, MODE_SOFTAP o MODE_SOFTAPSTATION.
-        """
+        """ Mode selection: can be MODE_STATION, MODE_SOFTAP, or MODE_SOFTAPSTATION. """
         if mode not in (1, 2, 3):
             raise RuntimeError("Invalid Mode")
         self.send("AT+CWMODE=%d" % mode, timeout=3)
 
     @property
     def local_ip(self):
-        """ Nuestra dirección IP local como una cadena de puntos.
-        """
+        """ Our local IP address as a dotted string. """
         reply = self.send("AT+CIFSR").strip(b"\r\n")
         for line in reply.split(b"\r\n"):
             if line.startswith(b'+CIFSR:STAIP,"'):
                 return str(line[14:-1], "utf-8")
         raise RuntimeError("Couldn't find IP address")
     
-    """
-    def print_APs(self, ap_data):
-        # Imprime los puntos de acceso de forma más legible.
-        print("\nPuntos de acceso disponibles:")
-        print("=" * 60)  # Línea de separación
-        for ap in ap_data:
-            ssid = ap[1].decode('utf-8')  # Decodificar el SSID
-            rssi = ap[2]
-            mac = ap[3].decode('utf-8')  # Decodificar la dirección MAC
-            channel = ap[4]
-            scan_type = ap[5]
-            min_scan_time = ap[6]
-            max_scan_time = ap[7]
-            encrypt = ap[8]
-            group_encrypt = ap[9]
-            supports_802_11 = ap[10]
-            wps = ap[11]
-            security = "Desconocido"
-        
-            # Determinar el tipo de seguridad
-            if encrypt == 0:
-                security = "Ninguna"
-            elif encrypt == 1:
-                security = "WEP"
-            elif encrypt in [2, 3]:
-                security = "WPA/WPA2-PSK"
-            elif encrypt == 4:
-                security = "WPA2-PSK"
-
-            # Imprimir información del punto de acceso
-            print(f"SSID: {ssid}")
-            print(f"  RSSI: {rssi} dBm")
-            print(f"  MAC: {mac}")
-            print(f"  Canal: {channel}")
-            print(f"  Tipo de escaneo: {scan_type}")
-            print(f"  Tiempo mínimo de escaneo: {min_scan_time}")
-            print(f"  Tiempo máximo de escaneo: {max_scan_time}")
-            print(f"  Par de cifrado: {encrypt}")
-            print(f"  Grupo de cifrado: {group_encrypt}")
-            print(f"  Soporte 802.11: {supports_802_11}")
-            print(f"  WPS: {wps}")
-            print(f"  Seguridad: {security}")
-            print("-" * 60)  # Línea de separación entre APs
-        print("=" * 60)  # Línea de cierre
-    """
-
     def get_ip(self):
         try:
             response = self.send("AT+CIFSR")
-            # Asegúrate de que la respuesta sea de tipo bytes y la convierta a string
-            response = response.decode('utf-8')  # Convierte bytes a string
-            # Buscar la línea que contiene la IP
+            # Ensure the response is of bytes type and convert it to string
+            response = response.decode('utf-8')  # Convert bytes to string
+            # Search for the line that contains the IP
             lines = response.splitlines()
             for line in lines:
                 if "CIFSR:STAIP" in line:
-                    # Extraer la IP
+                    #Extract the IP
                     ip_start = line.find('"') + 1
                     ip_end = line.rfind('"')
                     ip_address = line[ip_start:ip_end]
                     return ip_address
         except Exception as e:
-            print(f"Error al obtener la IP: {e}")
+            print(f"Error getting the IP: {e}")
         return None
 
     def get_mac_address(self):
-        """ Obtiene la dirección MAC del ESP32C3. """
+        """ Gets the MAC address of the ESP32C3. """
         reply = self.send("AT+CIFSR").strip(b"\r\n")
         for line in reply.split(b"\r\n"):
             if line.startswith(b'+CIFSR:STAMAC,"'):
-                return str(line[15:-1], "utf-8")  # Retorna la dirección MAC
+                return str(line[15:-1], "utf-8")  # Returns the MAC address
         raise RuntimeError("Couldn't find MAC address")
     
     def get_AP(self, retries=3):
@@ -302,7 +253,7 @@ class ESPC3:
             try:
                 if self.mode != self.MODE_STATION:
                     self.mode = self.MODE_STATION
-                # Enviar comando AT para escanear puntos de acceso
+                # Send AT command to scan for access points
                 scan = self.send("AT+CWLAP", timeout=5).split(b"\r\n")
             except RuntimeError:
                 continue
@@ -311,45 +262,45 @@ class ESPC3:
             
             for line in scan:
                 if line.startswith(b"+CWLAP:("):
-                    # Analizar la línea de respuesta
+                    # Parse the response line
                     line = line[8:-1].split(b",")
-                    router = ["Desconocido"] * 12 # Inicializa con valores por defecto
+                    router = ["Unknown"] * 12 # Initialize with default values
                     
-                    for i, val in enumerate(line):  # Ignorar el primer valor
-                        # Convertir el valor a string y manejarlo adecuadamente
+                    for i, val in enumerate(line):  # Ignore the first value
+                        # Convert the value to string and handle it properly
                         try:
-                            if i == 0:  # Método de cifrado
+                            if i == 0:  # Encryption method
                                 encryption_method = int(val)
                                 encryption_mapping = {
                                     0: "Ninguna", 1: "WEP", 2: "WPA-PSK",
                                     3: "WPA2-PSK", 4: "WPA/WPA2-PSK", 5: "WPA2 Enterprise",
                                     6: "WPA3-PSK", 7: "WPA2/WPA3-PSK", 8: "WAPI-PSK", 9: "OWE"
                                 }
-                                router[0] = encryption_mapping.get(encryption_method, "Desconocido")
+                                router[0] = encryption_mapping.get(encryption_method, "Unknown")
                             elif i == 1:  # SSID
-                                router[1] = str(val, "utf-8").strip('"') # SSID como string
+                                router[1] = str(val, "utf-8").strip('"') # SSID as string
                             elif i == 2:  # RSSI
-                                router[2] = int(val)  # RSSI como entero
+                                router[2] = int(val)  # RSSI as integer
                             elif i == 3:  # MAC
-                                router[3] = str(val, "utf-8")  # MAC como string
-                            elif i == 4:  # Canal
-                                router[4] = int(val)  # Canal como entero
-                            elif i == 5:  # Tipo de escaneo (se puede ignorar)
-                                router[5] = int(val)  # Se puede almacenar si es necesario
-                            elif i == 6:  # Tiempo mínimo de escaneo
-                                router[6] = int(val)  # Se puede almacenar si es necesario
-                            elif i == 7:  # Tiempo máximo de escaneo
+                                router[3] = str(val, "utf-8")  # MAC as string
+                            elif i == 4:  # Channel
+                                router[4] = int(val)  # Channel as integer
+                            elif i == 5:  # Scan type (can be ignored)
+                                router[5] = int(val)  # Can store if necessary
+                            elif i == 6:  # Minimum scan time
+                                router[6] = int(val)  # Can store if necessary
+                            elif i == 7:  # Maximum scan time
                                 router[7] = int(val)
-                            elif i == 8:  # Cifrado par
-                                router[8] = int(val)  # Se puede almacenar si es necesario
-                            elif i == 9:  # Cifrado grupo
-                                router[9] = int(val)  # Se puede almacenar si es necesario
-                            elif i == 10:  # Bandas (b/g/n)
-                                router[10] = int(val)  # Se puede almacenar si es necesario
+                            elif i == 8:  # Pair encryption
+                                router[8] = int(val)  # Can store if necessary
+                            elif i == 9:  # Group encryption
+                                router[9] = int(val)  # Can store if necessary
+                            elif i == 10:  # Bands (b/g/n)
+                                router[10] = int(val)  # Can store if necessary
                             elif i == 11:  # WPS
-                                router[11] = int(val)  # Se puede almacenar si es necesario    
+                                router[11] = int(val)  # Can store if necessary    
                         except ValueError:
-                            # Si no se puede convertir, almacenar como string
+                            # If it can't be converted, store as string
                             router[i] =str(val, "utf-8").strip('"')
                     routers.append(router)
             return routers
